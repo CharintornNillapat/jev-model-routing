@@ -1,0 +1,21 @@
+{
+  "minConfidence": 0.75,
+  "timeoutMs": 4000,
+  "maxPromptChars": 4000,
+  "subagentType": "general-purpose",
+  "sizes": {
+    "tiny": "A lookup, a rename, or a one-line answer. Trivial, mechanical, near-zero risk if slightly imperfect.",
+    "everyday": "A normal email, social post, or short document. Routine writing or a simple explanation.",
+    "large": "A multi-step build, a research task, a full report, a strategy call, or anything where a wrong answer would be expensive or hard to undo."
+  },
+  "modelBySize": {
+    "tiny": "haiku",
+    "everyday": "sonnet",
+    "large": "opus"
+  },
+  "modelLabel": {
+    "tiny": "Haiku",
+    "everyday": "Sonnet",
+    "large": "Opus"
+  }
+}

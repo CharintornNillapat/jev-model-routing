@@ -124,7 +124,6 @@ All settings live in `~/.claude/jev-router/`. On Windows that's `C:\Users\<you>\
 | `subagentType` | `"general-purpose"` | The Claude Code agent type to delegate to |
 | `modelBySize` | haiku / sonnet / opus | Model per size. Set a size to `null` to never delegate it. |
 | `modelLabel` | Haiku / Sonnet / Opus | Text for the "— done by …" footer and status output |
-| `sizes` | — | Copy of the descriptions, used only for status display |
 
 ### Tuning
 

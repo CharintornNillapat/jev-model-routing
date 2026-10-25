@@ -43,17 +43,21 @@ function readJson(p, fallback) {
 }
 
 function writeStats(stats) {
+  const p = statsPath();
+  if (!p) return;
+  // Write-then-rename: a half-written file would parse as garbage on the next
+  // read, and loadStats would silently start every counter over from zero.
+  const tmp = `${p}.${process.pid}.tmp`;
   try {
-    const p = statsPath();
-    if (!p) return;
     fs.mkdirSync(path.dirname(p), { recursive: true });
-    // Write-then-rename: a half-written file would parse as garbage on the next
-    // read, and loadStats would silently start every counter over from zero.
-    const tmp = `${p}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(stats, null, 2));
     fs.renameSync(tmp, p);
   } catch {
-    // stats are best-effort; never let a write failure affect routing
+    // Stats are best-effort. On Windows the rename can hit EPERM while an
+    // antivirus/indexer holds the file; drop the tmp so they don't pile up.
+    try {
+      fs.unlinkSync(tmp);
+    } catch {}
   }
 }
 
@@ -91,14 +95,8 @@ function ensureSession(stats, sessionId) {
       calls: 0,
       skipped: emptySkips(),
     };
-    try {
-      const state = readJson(STATE_PATH, { enabled: true });
-      state.sessionId = sessionId;
-      state.sessionStartedAt = stats.session.startedAt;
-      fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2) + "\n");
-    } catch {
-      // state stamping is best-effort
-    }
+    // Session info lives here only. Never write state.json: a torn write there
+    // reads back as { enabled: false } and silently turns the router off.
   }
   return stats.session;
 }

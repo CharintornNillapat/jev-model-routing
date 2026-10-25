@@ -372,16 +372,19 @@ function main() {
     byModel,
     byAgent,
   };
+  const p = statsPath(payload);
+  if (!p) return;
+  // Write-then-rename, like route.js: never leave a half-written stats file.
+  const tmp = `${p}.${process.pid}.tmp`;
   try {
-    const p = statsPath(payload);
-    if (!p) return;
     fs.mkdirSync(path.dirname(p), { recursive: true });
-    // Write-then-rename, like route.js: never leave a half-written stats file.
-    const tmp = `${p}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(stats, null, 2));
     fs.renameSync(tmp, p);
   } catch {
-    // best-effort, exactly like route.js
+    // best-effort, exactly like route.js; don't leave the tmp behind
+    try {
+      fs.unlinkSync(tmp);
+    } catch {}
   }
 }
 

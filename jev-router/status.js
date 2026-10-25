@@ -13,7 +13,8 @@ const read = (p, fb) => {
   }
 };
 const state = read(path.join(ROOT, "state.json"), { enabled: false });
-const config = read(path.join(ROOT, "config.json"), { sizes: {}, modelLabel: {} });
+const config = read(path.join(ROOT, "config.json"), { modelLabel: {} });
+const sizes = Object.keys(read(path.join(ROOT, "handlers.json"), {}));
 const statsFile = path.join(process.cwd(), ".claude", "jev-router-stats.json");
 const stats = read(statsFile, null);
 
@@ -28,7 +29,7 @@ function show(title, t) {
   const s = t.skipped || {};
   const u = t.usage || {};
   console.log(`\n${title}`);
-  for (const size of Object.keys(config.sizes)) {
+  for (const size of sizes) {
     const label = (config.modelLabel || {})[size] || "?";
     console.log(`  ${size.padEnd(9)} ${String(c[size] || 0).padStart(4)}  -> ${label}`);
   }

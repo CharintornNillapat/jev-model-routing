@@ -1,5 +1,5 @@
 {
-  "tiny": "A lookup, a rename, or a one-line answer. Trivial, mechanical, near-zero risk if slightly imperfect.",
-  "everyday": "A normal email, social post, or short document. Routine writing or a simple explanation.",
-  "large": "A multi-step build, a research task, a full report, a strategy call, or anything where a wrong answer would be expensive or hard to undo."
+  "tiny": "A lookup or one-step mechanical coding task: find a file or symbol, rename something, fix a typo, run a single command, or answer a short factual question about the code. Near-zero risk if slightly imperfect.",
+  "everyday": "A routine coding task with a clear scope: change one or two files, write or fix a unit test, fix a bug whose cause is already known, refactor a single function, or explain how a piece of code works.",
+  "large": "A multi-step or open-ended engineering task: design or architecture, changes across many files or systems, debugging a problem whose cause is unknown, research, or anything touching security, database migrations, production or money, where a mistake would be expensive or hard to undo."
 }

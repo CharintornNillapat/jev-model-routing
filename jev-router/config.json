@@ -12,5 +12,10 @@
     "tiny": "Haiku",
     "everyday": "Sonnet",
     "large": "Opus"
+  },
+  "contextGuard": {
+    "clearAtTokens": 150000,
+    "compactAtTokens": 400000,
+    "newTaskMin": 0.8
   }
 }

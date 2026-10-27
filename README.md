@@ -124,6 +124,20 @@ All settings live in `~/.claude/jev-router/`. On Windows that's `C:\Users\<you>\
 | `subagentType` | `"general-purpose"` | The Claude Code agent type to delegate to |
 | `modelBySize` | haiku / sonnet / opus | Model per size. Set a size to `null` to never delegate it. |
 | `modelLabel` | Haiku / Sonnet / Opus | Text for the "— done by …" footer and status output |
+| `contextGuard.clearAtTokens` | `150000` | Above this context size, ask Jev whether the message starts a new task, and if it does, warn you to `/clear` |
+| `contextGuard.compactAtTokens` | `400000` | Above this, suggest `/compact` even for the same task (again only after another 100K of growth) |
+| `contextGuard.newTaskMin` | `0.8` | How sure Jev must be that it's a new task before warning |
+| `contextGuard` | (on) | Set to `null` to turn the guard off |
+
+### Context guard
+
+In long sessions most of the cost isn't the model's thinking. It's Claude re-reading the whole conversation on every tool step: on one real month of use, cache reads were 74% of the spend, at about 268K tokens per step on average. The guard targets that. When the context is already large and your new message is a separate task, you see:
+
+```text
+[jev-router] Context is 412K tokens and this looks like a new task (93%). Every step Claude takes re-reads all of it. Press Esc, run /clear, and send the message again.
+```
+
+Below `clearAtTokens` it makes no Jev call at all. Above it, the check runs alongside the sizing call, so the hook doesn't take longer. It only warns: a hook can't run `/clear` itself, and the message you just sent still runs on the big context unless you stop it.
 
 ### Tuning
 
@@ -154,7 +168,8 @@ These numbers were measured on a real setup and are worth knowing before you rel
 3. Pipes the message to `jev route` on stdin, with no shell.
 4. If Jev is confident, adds the delegation note as `additionalContext`.
 5. Works out the session's model from the transcript's latest reply. Before the first reply it falls back to `ANTHROPIC_MODEL` or `settings.json` `"model"`. A message sized for the model already in use isn't delegated.
-6. **Fails open.** Any error (offline, timeout, missing key) means the hook prints nothing and Claude behaves as if the router weren't installed. Each error is counted and its reason saved in `lastErrors`.
+6. Context guard: reads the latest context size from the transcript. Above `clearAtTokens`, it asks `jev ask` whether the message is a new task compared with your last three typed messages, at the same time as the sizing call. A warning goes to you as `systemMessage`, not to Claude.
+7. **Fails open.** Any error (offline, timeout, missing key) means the hook prints nothing and Claude behaves as if the router weren't installed. Each error is counted and its reason saved in `lastErrors`.
 
 **`usage-collect.js`** (SubagentStop) reads subagent transcripts, totals their tokens (counting each message once), and prices them with the rate table at the top of the file. It links each subagent to its routing decision by prompt ID, confirmed with a hash of the prompt. Results are kept per agent across sessions, so totals cover the project's whole history.
 
@@ -162,7 +177,7 @@ These numbers were measured on a real setup and are worth knowing before you rel
 
 ### Privacy
 
-- Message text (trimmed to `maxPromptChars`) **is sent to TypeSafe's API** for sizing. Turn the router off (`state.json`) when you're working with anything that shouldn't leave your machine.
+- Message text (trimmed to `maxPromptChars`) **is sent to TypeSafe's API** for sizing. In sessions above `clearAtTokens`, the guard also sends your last three typed messages (each trimmed to 500 characters). Turn the router off (`state.json`) when you're working with anything that shouldn't leave your machine.
 - Nothing is written to disk except a 16-character SHA-256 prefix of each delegated prompt, used for matching. For short, guessable prompts that prefix can be reversed by guessing, so keep `.claude/jev-router-stats.json` out of git.
 
 ### Security notes

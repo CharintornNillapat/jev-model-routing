@@ -38,6 +38,8 @@ function show(title, t) {
   const skips = Object.entries(s).filter(([, n]) => n).map(([k, n]) => `${k}=${n}`);
   if (skips.length) console.log(`  skipped:  ${skips.join(", ")}`);
   console.log(`  jev calls: ${t.calls || 0}   tokens in/out: ${u.input_tokens || 0}/${u.output_tokens || 0}`);
+  const g = t.guard;
+  if (g) console.log(`  context guard: ${g.checks} checks, warned /clear=${g.clear} /compact=${g.compact}   tokens in/out: ${g.input_tokens}/${g.output_tokens}`);
 }
 
 if (stats.session) show(`This session (${stats.session.id}, since ${stats.session.startedAt}):`, stats.session);

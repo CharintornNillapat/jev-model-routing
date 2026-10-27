@@ -75,7 +75,42 @@ try {
   assert.notStrictEqual(r.status, 0);
   assert.strictEqual(fs.readFileSync(settingsPath, "utf8"), "{ not json");
 
-  console.log("installer test: all checks passed");
+  // Context guard: transcript parsing and the warning rules.
+  const { guardWarning, readTranscript } = require("./jev-router/route.js");
+  const tp = path.join(dir, "t.jsonl");
+  const rec = (o) => JSON.stringify(o);
+  fs.writeFileSync(
+    tp,
+    [
+      rec({ type: "user", message: { content: "fix the login bug" } }),
+      rec({ type: "assistant", message: { model: "claude-opus-5-5", usage: { input_tokens: 5, cache_read_input_tokens: 100 } } }),
+      rec({ type: "user", message: { content: [{ type: "tool_result", content: "ok" }] } }), // tool output, not typed
+      rec({ type: "user", isMeta: true, message: { content: "meta" } }),
+      rec({ type: "user", message: { content: "<task-notification>done</task-notification>" } }),
+      rec({ type: "user", message: { content: [{ type: "text", text: "still broken on safari" }] } }),
+      rec({ type: "assistant", isSidechain: true, message: { model: "claude-haiku-5-5", usage: { input_tokens: 9 } } }),
+      rec({ type: "assistant", message: { model: "claude-opus-5-5", usage: { input_tokens: 1, cache_read_input_tokens: 200000, cache_creation_input_tokens: 999 } } }),
+      rec({ type: "user", message: { content: "now write the landing page" } }), // the current prompt
+      "{ partial",
+    ].join("\n")
+  );
+  const t = readTranscript(tp, "now write the landing page");
+  assert.strictEqual(t.model, "claude-opus-5-5", "main model, not the subagent's");
+  assert.strictEqual(t.ctx, 201000, "context = input + cache read + cache write of the latest main turn");
+  assert.deepStrictEqual(t.recent, ["fix the login bug", "still broken on safari"], "typed messages only, current excluded");
+  assert.strictEqual(readTranscript(path.join(dir, "missing.jsonl"), "x").ctx, 0, "no transcript is fine");
+
+  const g = { clearAtTokens: 150000, compactAtTokens: 400000, newTaskMin: 0.8 };
+  assert.strictEqual(guardWarning(100000, 0.99, g, 0), null, "small context: never warn");
+  assert.strictEqual(guardWarning(200000, 0.9, g, 0).kind, "clear", "big context + new task");
+  assert.strictEqual(guardWarning(200000, 0.3, g, 0), null, "big context, same task, under compact line");
+  assert.strictEqual(guardWarning(200000, null, g, 0), null, "Jev unknown: no /clear guess");
+  assert.strictEqual(guardWarning(450000, 0.3, g, 0).kind, "compact", "very big, same task");
+  assert.strictEqual(guardWarning(480000, 0.3, g, 450000), null, "no repeat within 100K");
+  assert.strictEqual(guardWarning(560000, 0.3, g, 450000).kind, "compact", "repeat after 100K more");
+  assert.strictEqual(guardWarning(420000, 0.3, g, 700000).kind, "compact", "after /compact shrank it, warn again");
+
+  console.log("installer + context guard test: all checks passed");
 } finally {
   fs.rmSync(dir, { recursive: true, force: true });
 }

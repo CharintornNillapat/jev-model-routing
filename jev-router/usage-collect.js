@@ -388,8 +388,12 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch {
-  // never let a stats hook break a turn
+if (require.main === module) {
+  try {
+    main();
+  } catch {
+    // never let a stats hook break a turn
+  }
 }
+
+module.exports = { costOf };

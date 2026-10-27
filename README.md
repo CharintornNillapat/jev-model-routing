@@ -131,7 +131,9 @@ All settings live in `~/.claude/jev-router/`. On Windows that's `C:\Users\<you>\
 
 ### Context guard
 
-In long sessions most of the cost isn't the model's thinking. It's Claude re-reading the whole conversation on every tool step: on one real month of use, cache reads were 74% of the spend, at about 268K tokens per step on average. The guard targets that. When the context is already large and your new message is a separate task, you see:
+In long sessions most of the cost isn't the model's thinking. It's Claude re-reading and re-caching the whole conversation on every tool step. On one real month of use, that was 83% of the spend (cache reads 52%, cache writes 31%; output only 17%), at about 270K tokens per step on average. The guard targets that.
+
+To check whether it helps, `node measure.js --since <date>` prints average context per step and cost per message from your transcripts. Compare against a baseline saved earlier (`baseline.json`). Claude Code deletes transcripts after 30 days by default, so save the baseline early. When the context is already large and your new message is a separate task, you see:
 
 ```text
 [jev-router] Context is 412K tokens and this looks like a new task (93%). Every step Claude takes re-reads all of it. Press Esc, run /clear, and send the message again.

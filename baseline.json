@@ -1,0 +1,18 @@
+{
+  "measuredAt": "2026-10-27T13:41:59.293Z",
+  "since": "2026-09-27T00:00:00.000Z",
+  "until": "2026-10-28T00:00:00.000Z",
+  "turns": 11422,
+  "userMessages": 1181,
+  "avgContextTokens": 271771,
+  "turnsOver100kPct": 90,
+  "turnsOver150kPct": 74,
+  "estCostUsd": 1174.37,
+  "estCostPerUserMessageUsd": 0.994,
+  "costSharePct": {
+    "input": 0,
+    "output": 17,
+    "cache_read": 52,
+    "cache_write": 31
+  }
+}

@@ -141,6 +141,25 @@ To check whether it helps, `node measure.js --since <date>` prints average conte
 
 Below `clearAtTokens` it makes no Jev call at all. Above it, the check runs alongside the sizing call, so the hook doesn't take longer. It only warns: a hook can't run `/clear` itself, and the message you just sent still runs on the big context unless you stop it.
 
+#### Measured effect so far
+
+`measure.js` run over one user's own transcripts, before and after the guard (`baseline.json` and `after-2026-11-11.json` hold the raw output):
+
+| | Before (2026-09-27 to 10-27) | After (2026-10-28 to 11-11) |
+| --- | --- | --- |
+| User messages | 1,181 | 357 |
+| Steps | 11,422 | 2,538 |
+| Average context per step | 272K tokens | 141K tokens |
+| Steps with context over 150K | 74% | 33% |
+| Estimated cost per message | $0.99 | $0.38 |
+
+Read this as a hint, not proof:
+
+- It's an observation of one person's normal use, not an experiment. The two windows differ in length and in the work done, and habits (such as running `/clear` on your own) may have changed too. The drop can't be credited to the guard alone.
+- Costs are estimated from the rate table in `usage-collect.js`, not from billing.
+- The router was already running in both windows, so this says nothing about the router's own effect.
+- A randomized on/off comparison is planned to separate the guard's effect from everything else.
+
 ### Tuning
 
 - **A message got the wrong size?** Edit `handlers.json` and put the rule that tells the sizes apart into the description (for example, add "anything touching production or money" to `large`). Check the result with:
@@ -157,6 +176,7 @@ These numbers were measured on a real setup and are worth knowing before you rel
 - **Delegation is a suggestion.** Claude decides whether to follow it, and usually declines when the message builds on earlier conversation. In about 600 messages of real use, roughly 1 in 10 delegation suggestions led to a subagent.
 - **Small tasks save little.** A live test renamed a variable with and without delegating to Haiku. The whole session cost $0.263 delegated and $0.268 not delegated. The Haiku subagent was cheap ($0.007), but the main session's own startup and wrap-up cost about the same either way. Savings grow with how much work the subagent does: many file reads, searches and edits.
 - **`saved_vs_opus_usd` is an upper bound.** It prices the subagent's tokens at Opus rates. It doesn't subtract the main agent's extra turn, or the subagent re-reading context that the main session already had cached.
+- **Measured savings from delegation are small so far.** In one project, the 30 subagents that could be tied to a routing decision cost about $4.9 less than the same tokens would have at Opus rates (an upper bound, see above). Another 178 subagents in that project came from other sources and are not counted here.
 - The Jev call itself costs about 420 input and 46 output tokens per routed message.
 
 ---

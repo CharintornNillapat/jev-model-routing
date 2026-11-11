@@ -396,4 +396,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { costOf };
+module.exports = { costOf, sumTranscript };

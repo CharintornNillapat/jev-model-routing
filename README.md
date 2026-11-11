@@ -39,7 +39,7 @@ jev auth login
 node install.js
 ```
 
-Then **restart Claude Code**, because hooks are loaded at startup. Type `/hooks` in a session to confirm both hooks are listed.
+Then **restart Claude Code**, because hooks are loaded at startup. Type `/hooks` in a session to confirm all three hooks are listed.
 
 A successful install ends like this:
 
@@ -64,7 +64,7 @@ This updates the scripts but keeps your own `config.json`, `handlers.json` and `
 node install.js --uninstall
 ```
 
-This removes only this router's two hooks (every other hook stays) and deletes `~/.claude/jev-router/`. Per-project stats files are left in place.
+This removes only this router's three hooks (every other hook stays) and deletes `~/.claude/jev-router/`. Per-project stats files are left in place.
 
 ---
 
@@ -160,6 +160,31 @@ Read this as a hint, not proof:
 - The router was already running in both windows, so this says nothing about the router's own effect.
 - A randomized on/off comparison is planned to separate the guard's effect from everything else.
 
+### Experiment mode
+
+To find out what the router and the guard actually save, turn on `experiment` in `config.json`. Each session is then assigned, by a hash of its session id, to **control** or **treated** for the router and, independently, for the guard. Nothing else changes in how you work.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `experiment.enabled` | `false` | Master switch. Off means every session gets the full router and guard. |
+| `experiment.routerControl` | `0.5` | Share of sessions where Claude is **not** told to delegate |
+| `experiment.guardControl` | `0.25` | Share of sessions where the `/clear` warning is **not** shown |
+| `experiment.endsAt` | (none) | ISO date after which every session is treated again. Set it before you start, and stop there. |
+| `experiment.salt` | `"jev-2026-11"` | Change it to reshuffle which sessions land in which arm |
+
+Control sessions are still sized and checked, so every message carries the same size label in both arms. They just don't act on it. Comparing like with like (messages sized "large" that would have been delegated) is what makes the comparison fair. If a control session runs up a bigger bill because it got no `/clear` warning, that is the cost of measuring the guard.
+
+When the guard warns you in a treated session, follow it. Otherwise the experiment measures your reaction to the warning, not the warning.
+
+Everything is written to `~/.claude/jev-router/log.jsonl`: one row per message (arm, size, confidence, what would have been delegated, context size, whether a warning was shown) and one row per finished turn (main-session and subagent cost, steps, tool errors). The file holds hashes and numbers, never prompt text, and lives outside Claude Code's 30-day transcript cleanup.
+
+```bash
+node analyze.js                    # compare control and treated
+node analyze.js --since 2026-11-20 # only messages from that date
+```
+
+`analyze.js` resamples whole sessions (not messages) to put a 95% interval on each difference. It does not measure quality, so a cheaper arm only counts if the work was as good.
+
 ### Tuning
 
 - **A message got the wrong size?** Edit `handlers.json` and put the rule that tells the sizes apart into the description (for example, add "anything touching production or money" to `large`). Check the result with:
@@ -193,12 +218,15 @@ These numbers were measured on a real setup and are worth knowing before you rel
 6. Context guard: reads the latest context size from the transcript. Above `clearAtTokens`, it asks `jev ask` whether the message is a new task compared with your last three typed messages, at the same time as the sizing call. A warning goes to you as `systemMessage`, not to Claude.
 7. **Fails open.** Any error (offline, timeout, missing key) means the hook prints nothing and Claude behaves as if the router weren't installed. Each error is counted and its reason saved in `lastErrors`.
 
+**`turn-log.js`** (Stop) appends one cost row per finished turn to the experiment log: main-session tokens (each message counted once) plus every subagent spawned for that prompt. **`experiment.js`** holds the log and arm assignment the hooks share.
+
 **`usage-collect.js`** (SubagentStop) reads subagent transcripts, totals their tokens (counting each message once), and prices them with the rate table at the top of the file. It links each subagent to its routing decision by prompt ID, confirmed with a hash of the prompt. Results are kept per agent across sessions, so totals cover the project's whole history.
 
 **`install.js`** copies the files and adds the hooks in exec form (`"command": "node", "args": [path]`), so paths with spaces need no quoting. It never removes hooks it didn't add.
 
 ### Privacy
 
+- The experiment log (`~/.claude/jev-router/log.jsonl`) stores hashes of prompts and of project paths, plus numbers. No message text.
 - Message text (trimmed to `maxPromptChars`) **is sent to TypeSafe's API** for sizing. In sessions above `clearAtTokens`, the guard also sends your last three typed messages (each trimmed to 500 characters). Turn the router off (`state.json`) when you're working with anything that shouldn't leave your machine.
 - Nothing is written to disk except a 16-character SHA-256 prefix of each delegated prompt, used for matching. For short, guessable prompts that prefix can be reversed by guessing, so keep `.claude/jev-router-stats.json` out of git.
 

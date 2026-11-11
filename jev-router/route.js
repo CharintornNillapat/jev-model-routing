@@ -10,6 +10,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { appendLog, assignArm, short } = require("./experiment.js");
 
 // The router itself is installed globally, so config and state live next to
 // this script and are shared by every project.
@@ -327,6 +328,13 @@ function errorReason(e) {
     .slice(0, 200);
 }
 
+// Fields for the log row. `arm` is read by sizeUp and contextWarning to decide
+// whether to act; `experiment` says whether the arms were randomized at all.
+function assignArmFields(sessionId, config) {
+  const { experiment, ...arm } = assignArm(sessionId, config.experiment);
+  return { experiment, arm };
+}
+
 function output(obj) {
   process.stdout.write(JSON.stringify(obj));
 }
@@ -358,7 +366,9 @@ function runJev(args, input, timeoutMs) {
 }
 
 // Size the message and return the delegation instruction for Claude, or null.
-async function sizeUp(promptText, config, transcript, sessionId, promptId) {
+// `rec` is the log row for this message; each decision point below records what
+// happened to it, including what a control-arm session would have done.
+async function sizeUp(promptText, config, transcript, sessionId, promptId, rec) {
   let result;
   try {
     const timeoutMs = config.timeoutMs || 4000;
@@ -379,15 +389,19 @@ async function sizeUp(promptText, config, transcript, sessionId, promptId) {
   } catch (e) {
     // jev slow, erroring, offline, whatever -- proceed exactly as if the
     // router were not installed.
-    bumpStat("self", null, errorReason(e), sessionId);
+    rec.error = errorReason(e);
+    bumpStat("self", null, rec.error, sessionId);
     return null;
   }
 
   const bucket = result.handler; // "tiny" | "everyday" | "large" | "none"
   const confident = result.action === "auto";
+  rec.bucket = bucket || null;
+  rec.confidence = result.confidence || null;
 
   if (!confident || !bucket || bucket === "none") {
     // Low confidence, or Jev couldn't place it -> main agent handles it.
+    rec.skip = "unsure";
     bumpStat("self", result.usage, null, sessionId);
     return null;
   }
@@ -395,13 +409,25 @@ async function sizeUp(promptText, config, transcript, sessionId, promptId) {
   bumpStat(bucket, result.usage, null, sessionId);
 
   const model = config.modelBySize[bucket];
-  if (!model) return null; // size mapped to null: always handled by the main agent
+  if (!model) {
+    rec.skip = "no_model"; // size mapped to null: always handled by the main agent
+    return null;
+  }
+  rec.wouldModel = model;
 
   // Already running that model: delegating only adds a cold subagent.
   if (familyOf(model) && familyOf(model) === familyOf(transcript.model)) {
+    rec.skip = "same_model";
     bumpSkip("same_model", sessionId);
     return null;
   }
+
+  // Control arm: sized and logged exactly as above, but Claude is not told to delegate.
+  if (!rec.arm.router) {
+    rec.skip = "control";
+    return null;
+  }
+  rec.delegated = true; // suggested; whether Claude followed it shows in the cost row
 
   const label = (config.modelLabel && config.modelLabel[bucket]) || model;
   const agentType = config.subagentType || "general-purpose";
@@ -433,7 +459,7 @@ async function sizeUp(promptText, config, transcript, sessionId, promptId) {
 // Context guard: when the session is already big, warn the user (not Claude)
 // if this message starts a new task, so they can /clear before every step
 // re-reads hundreds of thousands of stale tokens. Returns the warning or null.
-async function contextWarning(promptText, config, transcript, sessionId) {
+async function contextWarning(promptText, config, transcript, sessionId, rec) {
   if (config.contextGuard === null) return null; // turned off
   const g = Object.assign({}, GUARD_DEFAULTS, config.contextGuard);
   if (transcript.ctx < g.clearAtTokens) return null; // small session: no Jev call at all
@@ -460,7 +486,11 @@ async function contextWarning(promptText, config, transcript, sessionId) {
 
   const stats = loadStats();
   const sess = ensureSession(stats, sessionId);
-  const warning = guardWarning(transcript.ctx, pNew, g, sess && sess.guardWarnedAt);
+  const would = guardWarning(transcript.ctx, pNew, g, sess && sess.guardWarnedAt);
+  rec.pNew = pNew;
+  rec.guardWould = would ? would.kind : null;
+  // Control arm: the check ran and is logged, but the user is not warned.
+  const warning = rec.arm.guard ? would : null;
   for (const t of sess ? [stats, sess] : [stats]) {
     t.guard = Object.assign({ checks: 0, clear: 0, compact: 0, input_tokens: 0, output_tokens: 0 }, t.guard);
     t.guard.checks++;
@@ -470,7 +500,8 @@ async function contextWarning(promptText, config, transcript, sessionId) {
       t.guard.output_tokens += usage.output_tokens || 0;
     }
   }
-  if (sess && warning && warning.kind === "compact") sess.guardWarnedAt = transcript.ctx;
+  // Tracked off `would`, not `warning`, so a control session logs the same sequence a treated one would see.
+  if (sess && would && would.kind === "compact") sess.guardWarnedAt = transcript.ctx;
   stats.updatedAt = new Date().toISOString();
   writeStats(stats);
   return warning && warning.text;
@@ -522,10 +553,28 @@ async function main() {
   }
 
   const transcript = readTranscript(hookInput.transcript_path, promptText);
+  const rec = {
+    t: "prompt",
+    ts: new Date().toISOString(),
+    sessionId,
+    promptId,
+    project: short(PROJECT_CWD),
+    ...assignArmFields(sessionId, config),
+    cfg: short(JSON.stringify(config)),
+    mainModel: transcript.model,
+    ctx: transcript.ctx,
+    chars: promptText.length,
+    promptHash: hashPrompt(promptText),
+  };
   const [context, warning] = await Promise.all([
-    sizeUp(promptText, config, transcript, sessionId, promptId).catch(() => null),
-    contextWarning(promptText, config, transcript, sessionId).catch(() => null),
+    sizeUp(promptText, config, transcript, sessionId, promptId, rec).catch((e) => {
+      rec.error = errorReason(e);
+      return null;
+    }),
+    contextWarning(promptText, config, transcript, sessionId, rec).catch(() => null),
   ]);
+  rec.guardShown = Boolean(warning);
+  if (sessionId) appendLog(rec); // no session id (the installer's self-test) = nothing worth logging
 
   const out = {};
   if (warning) out.systemMessage = warning; // shown to the user, not to Claude

@@ -18,12 +18,13 @@ const DEST = path.join(CLAUDE_DIR, "jev-router");
 const SETTINGS = path.join(CLAUDE_DIR, "settings.json");
 const SRC = path.join(__dirname, "jev-router");
 
-const SCRIPTS = ["route.js", "usage-collect.js", "status.js"]; // always updated
+const SCRIPTS = ["route.js", "usage-collect.js", "turn-log.js", "experiment.js", "status.js"]; // always updated
 const USER_FILES = ["config.json", "handlers.json", "state.json"]; // kept if present
 
 const HOOKS = [
   { event: "UserPromptSubmit", script: "route.js", timeout: 6, statusMessage: "jev-router: sizing up message..." },
   { event: "SubagentStop", script: "usage-collect.js", timeout: 10, statusMessage: "jev-router: recording execution tokens..." },
+  { event: "Stop", script: "turn-log.js", timeout: 10 }, // no statusMessage: it runs after every turn
 ];
 
 const say = (msg = "") => console.log(msg);
@@ -73,7 +74,7 @@ function hookFor(h) {
   };
 }
 
-// Adds our two hooks, or refreshes them in place. Every other hook is left
+// Adds our hooks, or refreshes them in place. Every other hook is left
 // exactly as it was. Returns true if anything changed.
 function mergeHooks(settings) {
   const before = JSON.stringify(settings);
@@ -220,7 +221,7 @@ function install(runTest) {
     say("  hooks already registered");
   }
   const ok = runTest && jevOk ? selfTest() : true;
-  say("\nNext: restart Claude Code (hooks load at startup), then run /hooks to see both hooks.");
+  say("\nNext: restart Claude Code (hooks load at startup), then run /hooks to see all three hooks.");
   say(`Stats: node "${path.join(DEST, "status.js")}"   (run from a project folder)`);
   if (!ok) process.exit(1);
 }

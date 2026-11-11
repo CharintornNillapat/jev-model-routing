@@ -17,5 +17,11 @@
     "clearAtTokens": 150000,
     "compactAtTokens": 400000,
     "newTaskMin": 0.8
+  },
+  "experiment": {
+    "enabled": false,
+    "routerControl": 0.5,
+    "guardControl": 0.25,
+    "salt": "jev-2026-11"
   }
 }
